@@ -5,7 +5,16 @@ import os
 
 
 def setup_api_key():
-    """Load Google API key from environment or prompt."""
+    """Load Google API key from environment or prompt.
+    
+    What does this component do?
+    Checks if the `GOOGLE_API_KEY` is present in the environment variables; if not, 
+    prompts the user to input it securely.
+
+    Why is it needed?
+    It's required to authenticate requests to the Gemini LLM service while avoiding 
+    hardcoding sensitive API keys directly in the source code.
+    """
     if "GOOGLE_API_KEY" not in os.environ:
         os.environ["GOOGLE_API_KEY"] = input("Enter Google API Key: ")
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "0"

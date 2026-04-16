@@ -31,7 +31,17 @@ HIGH_RISK_ACTIONS = [
 
 @dataclass
 class RoutingDecision:
-    """Result of the confidence router."""
+    """Result of the confidence router.
+    
+    What does this component do?
+    It encapsulates the outcome of a routing decision, including the specific action, 
+    the confidence score that triggered it, and metadata about human involvement.
+
+    Why is it needed?
+    It standardizes the format of decisions returned by the ConfidenceRouter so that 
+    the downstream application code knows exactly how to handle the message (escalate, 
+    auto-send) without needing to re-evaluate conditions.
+    """
     action: str          # "auto_send", "queue_review", "escalate"
     confidence: float
     reason: str
@@ -41,6 +51,16 @@ class RoutingDecision:
 
 class ConfidenceRouter:
     """Route agent responses based on confidence and risk level.
+
+    What does this component do?
+    Evaluates an LLM's response confidence alongside the action's risk level to 
+    determine if the response should be sent to the user, queued for review, or immediately 
+    escalated to a human agent.
+
+    Why is it needed?
+    It prevents the AI from taking high-risk actions autonomously (e.g., money transfer) 
+    and acts as a failsafe when the AI is unsure. Without this, the system would blindly 
+    trust the AI, completely negating the concept of a "Human-in-the-loop" safeguard.
 
     Thresholds:
         HIGH:   confidence >= 0.9 -> auto-send

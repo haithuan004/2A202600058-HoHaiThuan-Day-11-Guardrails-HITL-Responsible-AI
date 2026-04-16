@@ -133,7 +133,17 @@ COLANG = textwrap.dedent("""\
 # ============================================================
 
 def init_nemo():
-    """Initialize NeMo Guardrails with the Colang config."""
+    """Initialize NeMo Guardrails with the Colang config.
+
+    What does this component do?
+    Pre-compiles the YAML and Colang definitions into an executable LLMRails instance 
+    that the system can use for synchronous or asynchronous generation.
+
+    Why is it needed?
+    Compiling NeMo configurations is computationally expensive and should only be done 
+    once per application lifecycle. This initialization step allows us to reuse the compiled 
+    Rails instance for all subsequent messages, improving latency.
+    """
     global nemo_rails
     if not NEMO_AVAILABLE:
         print("Skipping NeMo init — nemoguardrails not installed.")
@@ -149,7 +159,18 @@ def init_nemo():
 
 
 class NemoGuardPlugin(base_plugin.BasePlugin):
-    """Plugin that uses NeMo Guardrails to validate messages."""
+    """Plugin that uses NeMo Guardrails to validate messages.
+    
+    What does this component do?
+    Wraps NVIDIA's NeMo Guardrails logic into a standard Google ADK Plugin format. It intercepts
+    user messages, runs them against the pre-defined Colang flows, and blocks any message that
+    triggers a rejection path.
+
+    Why is it needed?
+    NeMo Guardrails enables deterministic conversational flow control. It catches complex jailbreaks
+    (like "You are now DAN") by pattern-matching intents and enforcing fixed dialogue transition 
+    paths, which regex (InputGuardrail) and standard prompts cannot strictly guarantee.
+    """
 
     def __init__(self, colang_content: str, yaml_content: str):
         super().__init__(name="nemo_guardrail")

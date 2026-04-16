@@ -10,8 +10,14 @@ from core.utils import chat_with_agent
 def create_unsafe_agent():
     """Create a banking agent with NO guardrails.
 
-    The system prompt intentionally contains secrets to demonstrate
-    why guardrails are necessary.
+    What does this component do?
+    Initializes a raw LLM agent containing sensitive internal configurations (passwords, 
+    DB strings) in its system prompt with zero protective middleware.
+
+    Why is it needed?
+    It acts as the baseline testing target to demonstrate the system's vulnerabilities. 
+    Without this unprotected agent, we would not be able to perform a before-and-after 
+    security comparison to prove that our guardrails are effective against prompt injection.
     """
     agent = llm_agent.LlmAgent(
         model="gemini-2.5-flash-lite",
@@ -29,6 +35,15 @@ def create_unsafe_agent():
 
 def create_protected_agent(plugins: list):
     """Create a banking agent WITH guardrail plugins.
+
+    What does this component do?
+    Initializes an LLM agent that is wrapped with multiple layers of ADK plugins, including 
+    RateLimiting, Input checks, NeMo routing, Output filtering, and Audit logging.
+
+    Why is it needed?
+    This is the production-ready implementation of the agent. By running all user input 
+    and model output through the provided plugins array, it protects the underlying LLM 
+    from malicious manipulation and prevents accidental leakage of sensitive information.
 
     Args:
         plugins: List of BasePlugin instances (input + output guardrails)

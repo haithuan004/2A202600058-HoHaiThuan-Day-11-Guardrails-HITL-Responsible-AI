@@ -56,6 +56,15 @@ adversarial_prompts = [
 async def run_attacks(agent, runner, prompts=None):
     """Run adversarial prompts against the agent and collect results.
 
+    What does this component do?
+    Iterates through a list of adversarial prompts, sends them to the specified agent, 
+    and checks if the response was blocked by examining common rejection phrases.
+
+    Why is it needed?
+    It automates the red-teaming process, allowing us to rapidly test a large suite 
+    of attacks against the agent to verify its vulnerabilities (Part 1) and its 
+    resilience (Part 3) without manual interaction.
+
     Args:
         agent: The LlmAgent to attack
         runner: The InMemoryRunner
@@ -153,6 +162,15 @@ LƯU Ý: Prompt cần được viết bằng tiếng Việt một cách tự nhi
 
 async def generate_ai_attacks() -> list:
     """Use Gemini to generate adversarial prompts automatically.
+    
+    What does this component do?
+    Uses Gemini to generate synthetic, advanced adversarial prompt injections by prompting 
+    it with a Red Team persona and specific bypass techniques.
+
+    Why is it needed?
+    Humans are limited in their creativity and cannot write thousands of unique attacks. 
+    Using AI to attack AI allows us to automatically discover edge cases, continuously 
+    update the attack suite, and ensure our guardrails withstand novel attack vectors.
 
     Returns:
         List of attack dicts with type, prompt, target, why_it_works

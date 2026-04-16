@@ -20,7 +20,14 @@ from guardrails.monitoring import RateLimitPlugin, AuditLogPlugin, MonitoringAle
 
 
 async def part1_attacks():
-    """Part 1: Attack an unprotected agent."""
+    """Part 1: Attack an unprotected agent.
+    
+    What does this component do?
+    Executes the initial attack suite against an agent that has no defensive layers.
+
+    Why is it needed?
+    To establish a baseline vulnerability report.
+    """
     print("\n" + "=" * 60)
     print("PART 1: Attack Unprotected Agent")
     print("=" * 60)
@@ -45,7 +52,15 @@ async def part1_attacks():
 
 
 async def part2_guardrails():
-    """Part 2: Implement and test guardrails."""
+    """Part 2: Implement and test guardrails.
+    
+    What does this component do?
+    Runs unit tests for individual defensive components (Input, Output, NeMo).
+
+    Why is it needed?
+    Verifies that each guardrail component functions correctly in isolation before 
+    stacking them into the defense-in-depth pipeline.
+    """
     print("\n" + "=" * 60)
     print("PART 2: Guardrails")
     print("=" * 60)
@@ -82,7 +97,14 @@ async def part2_guardrails():
 
 
 async def part3_testing():
-    """Part 3: Before/after comparison + security pipeline."""
+    """Part 3: Before/after comparison + security pipeline.
+    
+    What does this component do?
+    Executes the automated SecurityTestPipeline to compare unprotected vs protected agents.
+
+    Why is it needed?
+    To programmatically prove the effectiveness of the implemented safety layers.
+    """
     print("\n" + "=" * 60)
     print("PART 3: Security Testing Pipeline")
     print("=" * 60)
@@ -110,7 +132,14 @@ async def part3_testing():
 
 
 def part4_hitl():
-    """Part 4: HITL design."""
+    """Part 4: HITL design.
+    
+    What does this component do?
+    Tests the ConfidenceRouter and prints out the predefined human-in-the-loop decision points.
+
+    Why is it needed?
+    Demonstrates integration of human oversight for edge cases and high-risk actions.
+    """
     print("\n" + "=" * 60)
     print("PART 4: Human-in-the-Loop Design")
     print("=" * 60)
@@ -127,7 +156,16 @@ def part4_hitl():
 
 
 async def part5_production_pipeline():
-    """Part 5: Full Assignment 11 Production Defense-in-Depth Pipeline."""
+    """Part 5: Full Assignment 11 Production Defense-in-Depth Pipeline.
+    
+    What does this component do?
+    Constructs the final agent equipped with all 6 safety layers and runs the full 
+    suite of Assignment 11 test queries (Safe, Attack, Rate Limit, Edge Cases).
+
+    Why is it needed?
+    It is the culmination of the lab, proving that the end-to-end defense-in-depth 
+    architecture can handle diverse interactions while maintaining active monitoring.
+    """
     print("\n" + "=" * 60)
     print("PART 5: Assignment 11 Production Defense Pipeline")
     print("=" * 60)
@@ -207,6 +245,14 @@ async def part5_production_pipeline():
 
 async def main(parts=None):
     """Run the full lab or specific parts.
+
+    What does this component do?
+    Serves as the central execution router, allowing developers to run the entire 
+    pipeline sequentially or trigger specific lab sections independently via CLI arguments.
+
+    Why is it needed?
+    It provides a cohesive CLI interface for the project, making it easy to test individual 
+    guardrail layers without having to run the entire battery of time-consuming tests every time.
 
     Args:
         parts: List of part numbers to run, or None for all

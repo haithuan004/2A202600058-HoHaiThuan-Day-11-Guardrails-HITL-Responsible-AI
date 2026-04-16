@@ -13,7 +13,18 @@ from google.adk.plugins import base_plugin
 
 
 class MetadataManager:
-    """Singleton to share metadata across plugins during an invocation."""
+    """Singleton to share metadata across plugins during an invocation.
+    
+    What does this component do?
+    Provides a centralized, in-memory key-value store tied to specific invocation IDs, 
+    allowing different plugins in the pipeline to pass state to each other.
+
+    Why is it needed?
+    Because the Google ADK plugins operate sequentially and the `InvocationContext` is 
+    often read-only, we need a side-channel to record flags (like `blocked=True` from 
+    `InputGuardrail`) so that the `AuditLogPlugin` at the end of the chain knows *why* 
+    an interaction failed and can log it properly.
+    """
     _store = defaultdict(dict)
 
     @classmethod
@@ -202,7 +213,19 @@ class CostGuardPlugin(base_plugin.BasePlugin):
         return None
 
 class MonitoringAlert:
-    """Watch plugin metrics and fire alerts on anomalies."""
+    """Watch plugin metrics and fire alerts on anomalies.
+    
+    What does this component do?
+    Aggregates counters (`total_count`, `blocked_count`) from all registered plugins 
+    and checks if the blockage rate exceeds a defined threshold (e.g., 30%). If it does, 
+    it fires a console alert.
+
+    Why is it needed?
+    While the `AuditLogPlugin` writes static logs, `MonitoringAlert` provides real-time 
+    observability. If an attacker mounts a massive automated attack, this component will 
+    alert the operations team immediately, enabling active incident response rather than 
+    passive forensic analysis.
+    """
 
     def __init__(self, plugins, block_threshold=0.3):
         self.plugins = {p.name: p for p in plugins if hasattr(p, "name")}

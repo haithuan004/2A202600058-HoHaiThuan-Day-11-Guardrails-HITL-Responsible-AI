@@ -32,6 +32,14 @@ from guardrails.output_guardrails import OutputGuardrailPlugin, _init_judge
 async def run_comparison():
     """Run attacks against both unprotected and protected agents.
 
+    What does this component do?
+    Executes the same set of adversarial attack prompts against two versions of the agent 
+    (one without guardrails, one with guardrails) to compare their resilience.
+
+    Why is it needed?
+    It demonstrates the specific value added by the defensive layers by showing a clear 
+    before-and-after comparison of how the system handles identical attacks.
+
     Returns:
         Tuple of (unprotected_results, protected_results)
     """
@@ -61,7 +69,15 @@ async def run_comparison():
 
 
 def print_comparison(unprotected, protected):
-    """Print a comparison table of before/after results."""
+    """Print a comparison table of before/after results.
+    
+    What does this component do?
+    Takes the results from `run_comparison` and formats them into a readable console table.
+
+    Why is it needed?
+    It makes it easy for developers or auditors to quickly see which attacks were successfully 
+    mitigated by the guardrails and calculate the improvement rate.
+    """
     print("\n" + "=" * 80)
     print("COMPARISON: Unprotected vs Protected")
     print("=" * 80)
@@ -96,7 +112,16 @@ def print_comparison(unprotected, protected):
 
 @dataclass
 class TestResult:
-    """Result of a single security test."""
+    """Result of a single security test.
+    
+    What does this component do?
+    A dataclass that standardizes how the outcome of an attack is stored, capturing the input, 
+    the response, whether it was blocked, and any specific secrets that leaked.
+
+    Why is it needed?
+    It provides a uniform schema so that the SecurityTestPipeline can easily compute aggregated 
+    metrics (like block rate or leak rate) without dealing with raw dicts or strings.
+    """
     attack_id: int
     category: str
     input_text: str
@@ -107,6 +132,15 @@ class TestResult:
 
 class SecurityTestPipeline:
     """Automated security testing pipeline for AI agents.
+
+    What does this component do?
+    Provides a structured way to run suites of tests (safe queries, attacks, edge cases, 
+    rate limits) against an agent and generate a comprehensive security report.
+
+    Why is it needed?
+    Static guardrails aren't enough; we need continuous, automated red-teaming to ensure 
+    that updates to the agent (or new models) don't introduce regressions. This pipeline 
+    allows us to programmatically verify our defense-in-depth architecture.
 
     Usage:
         pipeline = SecurityTestPipeline(agent, runner)
