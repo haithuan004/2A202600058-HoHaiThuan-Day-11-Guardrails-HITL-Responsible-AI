@@ -65,32 +65,41 @@ class ConfidenceRouter:
         Returns:
             RoutingDecision with routing action and metadata
         """
-        # TODO 12: Implement routing logic
-        #
         # 1. Check if action_type is in HIGH_RISK_ACTIONS
-        #    -> If yes: always escalate (action="escalate", priority="high",
-        #       requires_human=True, reason="High-risk action: {action_type}")
-        #
-        # 2. Check confidence thresholds:
-        #    - confidence >= 0.9:
-        #      action="auto_send", priority="low",
-        #      requires_human=False, reason="High confidence"
-        #
-        #    - 0.7 <= confidence < 0.9:
-        #      action="queue_review", priority="normal",
-        #      requires_human=True, reason="Medium confidence — needs review"
-        #
-        #    - confidence < 0.7:
-        #      action="escalate", priority="high",
-        #      requires_human=True, reason="Low confidence — escalating"
+        if action_type in HIGH_RISK_ACTIONS:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                priority="high",
+                requires_human=True,
+                reason=f"High-risk action detected: {action_type}. Requires human verification."
+            )
 
-        return RoutingDecision(
-            action="auto_send",
-            confidence=confidence,
-            reason="TODO: implement routing logic",
-            priority="low",
-            requires_human=False,
-        )  # TODO: Replace with implementation
+        # 2. Check confidence thresholds
+        if confidence >= self.HIGH_THRESHOLD:
+            return RoutingDecision(
+                action="auto_send",
+                confidence=confidence,
+                priority="low",
+                requires_human=False,
+                reason="High confidence score - safe to automate."
+            )
+        elif confidence >= self.MEDIUM_THRESHOLD:
+            return RoutingDecision(
+                action="queue_review",
+                confidence=confidence,
+                priority="normal",
+                requires_human=True,
+                reason="Medium confidence - representative review recommended."
+            )
+        else:
+            return RoutingDecision(
+                action="escalate",
+                confidence=confidence,
+                priority="high",
+                requires_human=True,
+                reason="Low confidence score - escalating to specialist."
+            )
 
 
 # ============================================================
@@ -109,27 +118,27 @@ class ConfidenceRouter:
 hitl_decision_points = [
     {
         "id": 1,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "High-Value Transaction Approval",
+        "trigger": "User requests transfer > 50,000,000 VND",
+        "hitl_model": "human-in-the-loop",
+        "context_needed": "User transaction history, account balance, and recipient risk score.",
+        "example": "Customer wants to transfer 100M VND to a new external account.",
     },
     {
         "id": 2,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "Account Closure Verification",
+        "trigger": "User expresses intent to close primary account",
+        "hitl_model": "human-as-tiebreaker",
+        "context_needed": "Reason for closure, customer tenure, and pending obligations.",
+        "example": "Customer says 'Tôi muốn đóng tài khoản vì phí quá cao'.",
     },
     {
         "id": 3,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
+        "name": "PII Exposure Alert",
+        "trigger": "Output Guardrail detects potential PII in bot response",
+        "hitl_model": "human-on-the-loop",
+        "context_needed": "The original user prompt and the flagged bot response with highlighted PII.",
+        "example": "Bot inadvertently includes a partial credit card number in a support chat.",
     },
 ]
 

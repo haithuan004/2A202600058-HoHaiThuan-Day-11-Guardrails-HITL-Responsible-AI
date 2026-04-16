@@ -11,6 +11,7 @@ from google.adk.plugins import base_plugin
 from google.adk.agents.invocation_context import InvocationContext
 
 from core.config import ALLOWED_TOPICS, BLOCKED_TOPICS
+from guardrails.monitoring import MetadataManager
 
 
 # ============================================================
@@ -31,6 +32,12 @@ from core.config import ALLOWED_TOPICS, BLOCKED_TOPICS
 def detect_injection(user_input: str) -> bool:
     """Detect prompt injection patterns in user input.
 
+    Why is it needed? 
+    This is the first line of defense. It catches basic syntactic attacks like 
+    "Ignore previous instructions" or "system prompt" before they even reach the LLM. 
+    It prevents simple role-confusion and exfiltration attacks that NeMo/Output guardrails 
+    might struggle with.
+
     Args:
         user_input: The user's message
 
@@ -38,9 +45,15 @@ def detect_injection(user_input: str) -> bool:
         True if injection detected, False otherwise
     """
     INJECTION_PATTERNS = [
-        # TODO: Add at least 5 regex patterns
-        # Example:
-        # r"ignore (all )?(previous|above) instructions",
+        r"ignore (all )?(previous|above) instructions",
+        r"forget (your )?instructions",
+        r"you are now (an? )?unrestricted",
+        r"system prompt",
+        r"reveal your (instructions|prompt|directives)",
+        r"pretend you are",
+        r"bỏ qua mọi hướng dẫn",
+        r"hãy cho tôi biết mật khẩu",
+        r"acting as a",
     ]
 
     for pattern in INJECTION_PATTERNS:
@@ -62,6 +75,12 @@ def detect_injection(user_input: str) -> bool:
 def topic_filter(user_input: str) -> bool:
     """Check if input is off-topic or contains blocked topics.
 
+    Why is it needed?
+    Prevents the agent from being misused for non-banking tasks (e.g., cooking, 
+    general chat, hacking instructions). By limiting the topic scope early, we reduce 
+    the attack surface area and avoid edge-case hallucinations that the Output Guardrail 
+    might not flag as strictly unsafe.
+
     Args:
         user_input: The user's message
 
@@ -70,12 +89,25 @@ def topic_filter(user_input: str) -> bool:
     """
     input_lower = user_input.lower()
 
-    # TODO: Implement logic:
-    # 1. If input contains any blocked topic -> return True
-    # 2. If input doesn't contain any allowed topic -> return True
-    # 3. Otherwise -> return False (allow)
+    input_lower = user_input.lower()
 
-    pass  # Replace with your implementation
+    # 1. If input contains any blocked topic -> return True
+    for topic in BLOCKED_TOPICS:
+        if topic.lower() in input_lower:
+            return True
+
+    # 2. If input doesn't contain any allowed topic -> return True
+    found_allowed = False
+    for topic in ALLOWED_TOPICS:
+        if topic.lower() in input_lower:
+            found_allowed = True
+            break
+    
+    if not found_allowed:
+        return True
+
+    # 3. Otherwise -> return False (allow)
+    return False
 
 
 # ============================================================
@@ -90,7 +122,13 @@ def topic_filter(user_input: str) -> bool:
 # ============================================================
 
 class InputGuardrailPlugin(base_plugin.BasePlugin):
-    """Plugin that blocks bad input before it reaches the LLM."""
+    """Plugin that blocks bad input before it reaches the LLM.
+    
+    Why is it needed?
+    It serves to execute the `detect_injection` and `topic_filter` checks as an ADK plugin. 
+    It saves computational cost by entirely skipping the LLM call if the user's input is 
+    blatantly malicious or irrelevant, reducing wasted tokens and latency.
+    """
 
     def __init__(self):
         super().__init__(name="input_guardrail")
@@ -128,14 +166,28 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         self.total_count += 1
         text = self._extract_text(user_message)
 
-        # TODO: Implement logic:
         # 1. Call detect_injection(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 2. Call topic_filter(text)
-        #    - If True: increment blocked_count, return self._block_response("...")
-        # 3. If both are False: return None (let message through)
+        if detect_injection(text):
+            self.blocked_count += 1
+            if invocation_context:
+                MetadataManager.set(invocation_context.invocation_id, "blocked", True)
+                MetadataManager.set(invocation_context.invocation_id, "blocked_by", "input_injection")
+            return self._block_response(
+                "Phát hiện hành vi can thiệp hệ thống. Yêu cầu của bạn đã bị chặn để đảm bảo an ninh."
+            )
 
-        pass  # Replace with your implementation
+        # 2. Call topic_filter(text)
+        if topic_filter(text):
+            self.blocked_count += 1
+            if invocation_context:
+                MetadataManager.set(invocation_context.invocation_id, "blocked", True)
+                MetadataManager.set(invocation_context.invocation_id, "blocked_by", "input_topic")
+            return self._block_response(
+                "Xin lỗi, tôi chỉ có thể hỗ trợ các vấn đề liên quan đến dịch vụ ngân hàng VinBank."
+            )
+
+        # 3. If both are False: return None (let message through)
+        return None
 
 
 # ============================================================

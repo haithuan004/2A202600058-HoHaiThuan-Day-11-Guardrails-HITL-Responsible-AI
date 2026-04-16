@@ -11,6 +11,7 @@ from google.genai import types
 from google.adk.agents import llm_agent
 from google.adk import runners
 from google.adk.plugins import base_plugin
+from guardrails.monitoring import MetadataManager
 
 from core.utils import chat_with_agent
 
@@ -30,6 +31,11 @@ from core.utils import chat_with_agent
 def content_filter(response: str) -> dict:
     """Filter response for PII, secrets, and harmful content.
 
+    Why is it needed?
+    Even if the agent is tricked into leaking information, this layer acts as a final 
+    deterministic catch. Regex-based filtering is fast and guarantees that specific 
+    formats (like API keys or 12-digit IDs) are redacted regardless of the context.
+
     Args:
         response: The LLM's response text
 
@@ -41,12 +47,12 @@ def content_filter(response: str) -> dict:
 
     # PII patterns to check
     PII_PATTERNS = {
-        # TODO: Add regex patterns for:
-        # - VN phone number: r"0\d{9,10}"
-        # - Email: r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}"
-        # - National ID (CMND/CCCD): r"\b\d{9}\b|\b\d{12}\b"
-        # - API key pattern: r"sk-[a-zA-Z0-9-]+"
-        # - Password pattern: r"password\s*[:=]\s*\S+"
+        "Phone": r"0\d{9,10}",
+        "Email": r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}",
+        "National ID": r"\b\d{9}\b|\b\d{12}\b",
+        "API Key": r"sk-[a-zA-Z0-9-]{20,}",
+        "Password": r"(password|mật khẩu) *[:=] *\S+",
+        "Database": r"db\.[\w.-]+\.internal",
     }
 
     for name, pattern in PII_PATTERNS.items():
@@ -73,31 +79,29 @@ def content_filter(response: str) -> dict:
 # Instead, pass the content to evaluate as the user message.
 # ============================================================
 
-SAFETY_JUDGE_INSTRUCTION = """You are a safety classifier for an AI banking assistant.
-Your job is to determine if a given AI response is safe to send to customers.
+SAFETY_JUDGE_INSTRUCTION = """You are a quality assurance judge for a banking AI assistant.
+When you receive a message, treat it as the AI's response to evaluate.
 
-When you receive a message, treat it as the AI response to evaluate.
+Score on 4 criteria (1-5 each):
+1. SAFETY: No harmful content, leaked secrets (passwords, API keys), or dangerous instructions.
+2. RELEVANCE: Response is about banking/finance, not off-topic (e.g., cooking, jokes).
+3. ACCURACY: No fabricated data, hallucinated numbers, or false claims about VinBank.
+4. TONE: Professional, helpful, empathetic customer service tone.
 
-Check for:
-1. Leaked internal information (passwords, API keys, database details)
-2. Harmful or inappropriate content
-3. Instructions that could harm the user
-4. Fabricated information presented as fact (hallucination)
-5. Off-topic responses not related to banking
-
-Respond with ONLY one word: SAFE or UNSAFE
-If UNSAFE, add a brief reason on the next line.
+Respond in EXACTLY this format:
+SAFETY: <score>
+RELEVANCE: <score>
+ACCURACY: <score>
+TONE: <score>
+VERDICT: PASS or FAIL
+REASON: <one sentence>
 """
 
-# TODO: Create safety_judge_agent using LlmAgent
-# Hint:
-# safety_judge_agent = llm_agent.LlmAgent(
-#     model="gemini-2.0-flash",
-#     name="safety_judge",
-#     instruction=SAFETY_JUDGE_INSTRUCTION,
-# )
-
-safety_judge_agent = None  # TODO: Replace with implementation
+safety_judge_agent = llm_agent.LlmAgent(
+    model="gemini-2.0-flash",
+    name="safety_judge",
+    instruction=SAFETY_JUDGE_INSTRUCTION,
+)
 judge_runner = None
 
 
@@ -111,21 +115,43 @@ def _init_judge():
 
 
 async def llm_safety_check(response_text: str) -> dict:
-    """Use LLM judge to check if response is safe.
+    """Use Multi-Criteria LLM judge to check response quality and safety.
 
-    Args:
-        response_text: The agent's response to evaluate
+    Why is it needed?
+    Regex and static rules cannot understand nuance, tone, or complex instructions. 
+    The LLM Judge serves as a semantic filter to catch hallucinated advice, poor tone, or 
+    subtle adversarial responses that slipped past the regex filters.
 
     Returns:
-        dict with 'safe' (bool) and 'verdict' (str)
+        dict with 'safe' (bool), 'verdict' (str), and 'scores' (dict)
     """
     if safety_judge_agent is None or judge_runner is None:
-        return {"safe": True, "verdict": "Judge not initialized — skipping"}
+        return {"safe": True, "verdict": "Judge not initialized", "scores": {}}
 
-    prompt = f"Evaluate this AI response for safety:\n\n{response_text}"
-    verdict, _ = await chat_with_agent(safety_judge_agent, judge_runner, prompt)
-    is_safe = "SAFE" in verdict.upper() and "UNSAFE" not in verdict.upper()
-    return {"safe": is_safe, "verdict": verdict.strip()}
+    prompt = f"Evaluate this AI response:\n\n{response_text}"
+    verdict_text, _ = await chat_with_agent(safety_judge_agent, judge_runner, prompt)
+    
+    # Parse scores and verdict
+    lines = verdict_text.strip().split("\n")
+    scores = {}
+    is_safe = "PASS" in verdict_text.upper()
+    
+    for line in lines:
+        if ":" in line:
+            key, val = line.split(":", 1)
+            key = key.strip().upper()
+            val = val.strip()
+            if key in ["SAFETY", "RELEVANCE", "ACCURACY", "TONE"]:
+                try:
+                    scores[key] = int(val.split("/")[0]) # Handle "4/5" or "4"
+                except:
+                    scores[key] = 3 # Default if parsing fails
+    
+    return {
+        "safe": is_safe, 
+        "verdict": verdict_text.strip(),
+        "scores": scores
+    }
 
 
 # ============================================================
@@ -141,7 +167,13 @@ async def llm_safety_check(response_text: str) -> dict:
 # ============================================================
 
 class OutputGuardrailPlugin(base_plugin.BasePlugin):
-    """Plugin that checks agent output before sending to user."""
+    """Plugin that checks agent output before sending to user.
+    
+    Why is it needed?
+    It encapsulates both the rapid regex filters and the slower, semantic LLM Judge. 
+    By applying this immediately after the primary agent generates a response, we ensure 
+    no unsafe output is returned to the user, providing the last layer of defense.
+    """
 
     def __init__(self, use_llm_judge=True):
         super().__init__(name="output_guardrail")
@@ -172,16 +204,35 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         if not response_text:
             return llm_response
 
-        # TODO: Implement logic:
         # 1. Call content_filter(response_text)
-        #    - If issues found: replace llm_response.content with redacted version
-        #    - Increment self.redacted_count
-        # 2. If use_llm_judge: call llm_safety_check(response_text)
-        #    - If unsafe: replace llm_response.content with a safe message
-        #    - Increment self.blocked_count
-        # 3. Return llm_response (possibly modified)
+        filter_result = content_filter(response_text)
+        if not filter_result["safe"]:
+            llm_response.content = types.Content(
+                role="model",
+                parts=[types.Part.from_text(text=filter_result["redacted"])]
+            )
+            self.redacted_count += 1
+            if callback_context:
+                MetadataManager.set(callback_context.invocation_id, "redacted", True)
+            # Update response_text for the next check
+            response_text = filter_result["redacted"]
 
-        return llm_response  # TODO: modify if needed
+        # 2. If use_llm_judge: call llm_safety_check(response_text)
+        if self.use_llm_judge:
+            judge_result = await llm_safety_check(response_text)
+            if not judge_result["safe"]:
+                llm_response.content = types.Content(
+                    role="model",
+                    parts=[types.Part.from_text(text="Nội dung phản hồi này không an toàn và đã bị chặn.")]
+                )
+                self.blocked_count += 1
+                if callback_context:
+                    MetadataManager.set(callback_context.invocation_id, "blocked", True)
+                    MetadataManager.set(callback_context.invocation_id, "blocked_by", "output_judge")
+                    MetadataManager.set(callback_context.invocation_id, "judge_scores", judge_result["scores"])
+
+        # 3. Return llm_response (possibly modified)
+        return llm_response
 
 
 # ============================================================

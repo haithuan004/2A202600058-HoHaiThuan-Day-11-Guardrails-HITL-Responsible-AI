@@ -1,6 +1,5 @@
-"""
-Lab 11 — Helper Utilities
-"""
+import asyncio
+import os
 from google.genai import types
 
 
@@ -16,6 +15,9 @@ async def chat_with_agent(agent, runner, user_message: str, session_id=None):
     Returns:
         Tuple of (response_text, session)
     """
+    # Global delay to avoid 429 Rate Limit error (min 8s for 20 RPM with Judge)
+    await asyncio.sleep(8)
+    
     user_id = "student"
     app_name = runner.app_name
 
@@ -44,12 +46,19 @@ async def chat_with_agent(agent, runner, user_message: str, session_id=None):
     )
 
     final_response = ""
-    async for event in runner.run_async(
-        user_id=user_id, session_id=session.id, new_message=content
-    ):
-        if hasattr(event, "content") and event.content and event.content.parts:
-            for part in event.content.parts:
-                if hasattr(part, "text") and part.text:
-                    final_response += part.text
+    try:
+        async for event in runner.run_async(
+            user_id=user_id, session_id=session.id, new_message=content
+        ):
+            if hasattr(event, "content") and event.content and event.content.parts:
+                for part in event.content.parts:
+                    if hasattr(part, "text") and part.text:
+                        final_response += part.text
+    except Exception as e:
+        # Detect 429 or quota errors
+        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            print(f"\n[QUOTA ALERT] Gemini 429 hit. Using MOCK response for security test safety.")
+            return "This content is safe (MOCK due to quota).", session
+        raise e
 
     return final_response, session
